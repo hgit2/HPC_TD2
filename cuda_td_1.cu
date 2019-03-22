@@ -1,14 +1,9 @@
 #include "wb.h"
 
+__global__ void vecAddKernel( float *in1, float *in2, float *out, int len);
+
 void vecAdd(float *in1, float *in2, float *out, int len) {
 	vecAddKernel <<< ceil(len/256.0),256 >>> (in1 , in2 , out , len );
-}
-
-__global__ void vecAddKernel( float *in1, float *in2, float *out, int len){
-	int i = threadIdx.x+blockDim.x∗blockIdx.x;
-	if(i< len){
-		out[i]=in1[i]+in2[i];
-	}
 }
 
 int main(int argc, char **argv) {
@@ -17,30 +12,31 @@ int main(int argc, char **argv) {
     float *hostInput1;
     float *hostInput2;
     float *hostOutput;
+    float *deviceInput1;
+    float *deviceInput2;
+    float *deviceOutput;
     args = wbArg_read(argc, argv);
     wbTime_start(Generic, "Importing data and creating memory on host");
 
 		// Rappel : CPU=host
-    hostInput1 =
-    (float *)wbImport(wbArg_getInputFile(args, 0), &inputLength);
-    hostInput2 =
-    (float *)wbImport(wbArg_getInputFile(args, 1), &inputLength);
+    hostInput1 = (float *)wbImport(wbArg_getInputFile(args, 0), &inputLength);
+    hostInput2 = (float *)wbImport(wbArg_getInputFile(args, 1), &inputLength);
     hostOutput = (float *)malloc(inputLength * sizeof(float));
     wbTime_stop(Generic, "Importing data and creating memory on host");
     wbLog(TRACE, "The input length is ", inputLength);
     wbTime_start(GPU, "Allocating GPU memory.");
 
     //@@ Allocate GPU memory here
-		cudaMalloc(( void ∗∗ ) &deviceInput1 , inputlength * sizeof(float));		
-		cudaMalloc(( void ∗∗ ) &deviceInput2 , inputlength * sizeof(float));
-		cudaMalloc(( void ∗∗ ) &deviceOutput , inputlength * sizeof(float));
+		cudaMalloc( (void **) &deviceInput1, inputLength * sizeof(float) );
+		cudaMalloc( (void **) &deviceInput2, inputLength * sizeof(float) );
+		cudaMalloc( (void **) &deviceOutput, inputLength * sizeof(float) );
 
     wbTime_stop(GPU, "Allocating GPU memory.");
     wbTime_start(GPU, "Copying input memory to the GPU.");
 
     //@@ Copy memory to the GPU here
-		cudaMemcpy( deviceInput1 , hostInput1 , inputlength * sizeof(float) , cudaMemcpyHostToDevice );
-		cudaMemcpy( deviceInput2 , hostInput2 , inputlength  * sizeof(float), cudaMemcpyHostToDevice );
+		cudaMemcpy( deviceInput1 , hostInput1 , inputLength * sizeof(float) , cudaMemcpyHostToDevice );
+		cudaMemcpy( deviceInput2 , hostInput2 , inputLength  * sizeof(float), cudaMemcpyHostToDevice );
 
     wbTime_stop(GPU, "Copying input memory to the GPU.");
 
@@ -50,14 +46,14 @@ int main(int argc, char **argv) {
     wbTime_start(Compute, "Performing CUDA computation");
 
     //@@ Launch the GPU Kernel here
-		vecAdd(deviceInput1, deviceInput2, deviceOutput, inputlength)
+		vecAdd(deviceInput1, deviceInput2, deviceOutput, inputLength);
 
     cudaDeviceSynchronize();
     wbTime_stop(Compute, "Performing CUDA computation");
     wbTime_start(Copy, "Copying output memory to the CPU");
 
     //@@ Copy the GPU memory back to the CPU here
-		cudaMemcpy( hostOutput , deviceOutput , inputlength * sizeof(float) , cudaMemcpyDeviceToHost);
+		cudaMemcpy( hostOutput , deviceOutput , inputLength * sizeof(float) , cudaMemcpyDeviceToHost);
 
     wbTime_stop(Copy, "Copying output memory to the CPU");
     wbTime_start(GPU, "Freeing GPU Memory");
@@ -75,3 +71,11 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+
+__global__ void vecAddKernel( float *in1, float *in2, float *out, int len){
+	int i = threadIdx.x + blockDim.x * blockIdx.x ;
+	if(i<len){
+		out[i]=in1[i] + in2[i] ;
+	} 
+}
+
